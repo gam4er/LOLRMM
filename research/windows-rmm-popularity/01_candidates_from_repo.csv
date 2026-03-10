@@ -1,0 +1,26 @@
+slug,name,website,yaml_path
+anydesk,AnyDesk,https://anydesk.com/en,yaml/anydesk.yaml
+teamviewer,TeamViewer,https://www.teamviewer.com/en,yaml/teamviewer.yaml
+screenconnect,ScreenConnect,https://www.connectwise.com,yaml/screenconnect.yaml
+connectwise_control,ConnectWise Control,https://www.screenconnect.com/,yaml/connectwise_control.yaml
+atera,Atera,https://www.atera.com/,yaml/atera.yaml
+splashtop,Splashtop,https://www.splashtop.com/,yaml/splashtop.yaml
+logmein_rescue,LogMeIn Rescue,https://www.logmein.com/products/rescue,yaml/logmein_rescue.yaml
+gotoassist_goto_resolve,GoToAssist (GoTo Resolve),https://www.logmein.com/products/resolve,yaml/gotoassist_(goto_resolve).yaml
+gotomypc,GoToMyPC,https://get.gotomypc.com/,yaml/gotomypc.yaml
+remotepc,RemotePC,https://www.remotepc.com/,yaml/remotepc.yaml
+netsupport_manager,NetSupport Manager,https://www.netsupportmanager.com/,yaml/netsupport_manager.yaml
+chrome_remote_desktop,Chrome Remote Desktop,https://remotedesktop.google.com/,yaml/chrome_remote_desktop.yaml
+rustdesk,RustDesk,https://rustdesk.com/,yaml/rustdesk.yaml
+dw_service,DWService,https://www.dwservice.net/,yaml/dw_service.yaml
+action1,Action1,https://www.action1.com/,yaml/action1.yaml
+ninjaone_formerly_ninjarmm,NinjaOne,https://www.ninjaone.com/rmm/,yaml/ninjaone_(formerly_ninjarmm).yaml
+beyondtrust_bomgar,BeyondTrust Remote Support (Bomgar),https://www.beyondtrust.com/products/remote-support,yaml/beyondtrust_(bomgar).yaml
+zohoassist,Zoho Assist,https://www.zoho.com/assist/,yaml/zohoassist.yaml
+remote_utilities,Remote Utilities,https://www.remoteutilities.com/,yaml/remote_utilities.yaml
+supremo,SupRemo,https://www.supremocontrol.com/,yaml/supremo.yaml
+ultraviewer,UltraViewer,https://www.ultraviewer.net/,yaml/ultraviewer.yaml
+radmin,Radmin,https://www.radmin.com/,yaml/radmin.yaml
+realvnc,RealVNC Connect,https://www.realvnc.com/en/connect/,yaml/realvnc.yaml
+tightvnc,TightVNC,https://www.tightvnc.com/,yaml/tightvnc.yaml
+ultra_vnc,UltraVNC,https://uvnc.com/,yaml/ultra_vnc.yaml

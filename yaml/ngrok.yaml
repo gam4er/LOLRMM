@@ -1,9 +1,13 @@
 Name: ngrok
 Category: RAT
-Description: ngrok is a remote monitoring and management (RMM) tool. More information will be added as it becomes available.
+Description: >
+  ngrok is a tunneling / reverse-proxy service frequently abused for remote access
+  and C2 concealment. More operational detail is tracked in LOTTunnels. ANY.RUN
+  documented Overlord RAT routing encrypted WSS C2 through an ngrok tunnel
+  (hostname pattern *.ngrok... to 3.124.142.205:443) in its October 2026 Overlord write-up.
 Author: Jose Hernandez
 Created: '2024-07-19'
-LastModified: '2024-07-19'
+LastModified: '2026-10-05'
 Details:
     Website: 'https://ngrok.com/'
     PEMetadata:
@@ -36,7 +40,14 @@ Artifacts:
               - connect.jp.ngrok-agent.com
               - connect.in.ngrok-agent.com
               - ngrok.com
-          Ports: []
+              - '*.ngrok-free.app'
+              - '*.ngrok.app'
+              - '*.ngrok.io'
+              - '*.ngrok.dev'
+              - '*.ngrok.pro'
+              - '*.ngrok.pizza'
+          Ports:
+              - 443
 Detections:
     - Sigma: https://github.com/magicsword-io/LOLRMM/blob/main/detections/sigma/ngrok_network_sigma.yml
       Description: Detects potential network activity of ngrok RMM tool
@@ -44,4 +55,15 @@ Detections:
       Description: Detects potential processes activity of ngrok RMM tool
 References:
     - https://ngrok.com/docs/guides/running-behind-firewalls/
+    - https://any.run/malware-trends/overlord/
+    - https://x.com/anyrun_app/status/2107063549172367583
+    - https://app.any.run/tasks/9304f809-0265-4d7d-81f9-92f5835ba7c8/
+    - https://lottunnels.github.io/lottunnels/Binaries/ngrok/
 Acknowledgement: []
+CodeSigning:
+    certificates:
+        - signer_name: Ngrok, Inc.
+          certificate_thumbprint: 7A54EB0D199484EB8CAEA931C90A744BCF02A7E0
+          certificate_der_base64: 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
+          src_file_sha256: c4c1e472823a12e2ee127a64d6ee3de9b31d02bc972baeb8800e6d918dce16a1
+          src_file_path: downloaded_files/ngrok/c4c1e472823a12e2ee127a64d6ee3de9b31d02bc972baeb8800e6d918dce16a1

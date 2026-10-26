@@ -7,8 +7,9 @@ references:
     - https://github.com/magicsword-io/LOLRMM
 author: LOLRMM Project
 date: 2025-12-01
+modified: 2026-09-02
 tags:
-    - attack.execution
+    - attack.command-and-control
     - attack.t1219
 logsource:
     product: windows
@@ -16,10 +17,9 @@ logsource:
 detection:
     selection:
         DestinationHostname|endswith:
-            - *.sophos.com
-            - *.sophosupd.com
-            - *.sophosupd.net
-            - community.sophos.com/on-premise-endpoint/f/sophos-endpoint-software/5725/sophos-remote-management-system
+            - '*.sophos.com'
+            - '*.sophosupd.com'
+            - '*.sophosupd.net'
     condition: selection
 falsepositives:
     - Legitimate use of Sophos-Remote Management System

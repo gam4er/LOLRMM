@@ -6,9 +6,45 @@ This script creates Sigma, Splunk, and KQL detection rules.
 
 import os
 import json
+import ntpath
+import re
 import yaml
 import glob
 from datetime import datetime
+from detection_paths import process_image_pattern
+
+
+def executable_basename(path):
+    """Read an installation path, not a command line, on any host OS.
+
+    Preserve Sigma wildcards within filenames, but exclude directory patterns,
+    invalid Windows placeholder names, and arguments following an executable.
+    """
+    if not isinstance(path, str):
+        return None
+    path = path.strip()
+    if len(path) >= 2 and path[0] == path[-1] and path[0] in "\"'":
+        path = path[1:-1]
+    if any(char in path for char in '"|') or re.search(r"\.exe\s", path, re.I):
+        return None
+    name = ntpath.basename(path)
+    if (
+        not name
+        or name.startswith("*")
+        or not name.lower().endswith(".exe")
+        or any(char in name for char in "<>:")
+        or any(ord(char) < 32 for char in name)
+    ):
+        return None
+    return name
+
+
+def sorted_case_insensitive_unique(values):
+    """Pick the same spelling regardless of discovery or record order."""
+    unique = {}
+    for value in sorted(values, key=lambda value: (value.casefold(), value)):
+        unique.setdefault(value.casefold(), value)
+    return list(unique.values())
 
 
 def generate_sigma_rule():
@@ -27,19 +63,20 @@ def generate_sigma_rule():
                 data = yaml.safe_load(file)
 
             if "Details" in data and "InstallationPaths" in data["Details"]:
-                for path in data["Details"]["InstallationPaths"]:
-                    # Extract executable name
-                    exe_name = os.path.basename(path)
-                    if exe_name and not exe_name.startswith("*"):
-                        exe_list.append(f"\\\\{exe_name}")
+                # An empty "InstallationPaths:" key parses as None, which used to
+                # raise and skip the rest of the file.
+                for path in data["Details"]["InstallationPaths"] or []:
+                    exe_name = executable_basename(path)
+                    if exe_name:
+                        pattern = process_image_pattern(path, exe_name)
+                        if pattern:
+                            exe_list.append(pattern)
         except Exception as e:
             print(f"Error processing {yaml_file}: {e}")
 
-    # Deduplicate the executable list
-    exe_list = list(set(exe_list))
-
-    # Sort the list for better readability
-    exe_list.sort()
+    # Deduplicate the executable list. Sigma matches case-insensitively, so
+    # "AteraAgent.exe" and "ateraagent.exe" are the same condition.
+    exe_list = sorted_case_insensitive_unique(exe_list)
 
     # Print the number of executables found
     print(f"Found {len(exe_list)} unique RMM executables for Sigma rule")
@@ -53,7 +90,12 @@ def generate_sigma_rule():
         "author": "LOLRMM Project",
         "date": "2025-03-18",
         "modified": datetime.now().strftime("%Y-%m-%d"),
-        "tags": ["attack.lateral-movement", "attack.t1219"],
+        # T1219 sits under Command and Control in ATT&CK, and Sigma requires the
+        # owning tactic to be tagged alongside the technique.
+        "tags": [
+            "attack.command-and-control",
+            "attack.t1219",
+        ],
         "logsource": {"category": "process_creation", "product": "windows"},
         "detection": {
             "selection": {"Image|endswith": exe_list},
@@ -132,8 +174,9 @@ def generate_sigma_domains_rule():
             ".screenconnect.com",
         ]
 
-    # Deduplicate
-    domain_list = list(set(domain_list))
+    # Deduplicate. Sorting keeps regenerated rules stable: set iteration order
+    # varies between runs, which reshuffles the whole list on every run.
+    domain_list = sorted_case_insensitive_unique(domain_list)
 
     sigma_domains_rule = {
         "title": "DNS Queries to Known RMM Domains",
@@ -240,18 +283,40 @@ def generate_kql_detection():
         "author": "LOLRMM Project",
         "date": datetime.now().strftime("%Y/%m/%d"),
         "query": """// Detecting Unauthorized RMM Instances in Your MDE Environment
-
-let SanctionRMM = dynamic(\"YOUR_APPROVED_RMM_DOMAINS\"); // E.g. \"bomgarcloud.com\" - Replace with your approved RMM domains
+// Note: this query targets Microsoft Defender for Endpoint (DeviceNetworkEvents.Timestamp).
+// For Microsoft Sentinel, replace both `Timestamp` references with `TimeGenerated`.
+// Wildcard CSV entries are normalized to domain suffixes, then matched with a host boundary.
+let SanctionRMM = dynamic([\"bomgarcloud.com\"]); // Replace with your approved RMM domains, e.g. dynamic([\"teamviewer.com\", \"anydesk.com\"])
 let RMMList = externaldata(URI: string, RMMTool: string)
-    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv'];
-let RMMUrl = RMMList | project URI;
-
+    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv']
+    with (format=\"csv\", ignoreFirstRecord=true)
+    | extend RawURI = tolower(trim(@\"[ \\t\\r\\n]+\", URI))
+    | project Domain = trim_end(@\"\\.+\", case(
+        RawURI startswith \"*.\", replace_string(RawURI, \"*.\", \"\"),
+        RawURI startswith \"*\", replace_string(RawURI, \"*\", \"\"),
+        RawURI contains \"*\", replace_regex(RawURI, @\".+?\\*\", \"\"),
+        RawURI
+    ))
+    | where isnotempty(trim(@\"\\.+\", Domain));
+let RMMDomains = toscalar(RMMList | summarize make_set(Domain));
 DeviceNetworkEvents
-| where TimeGenerated > ago(1h)
-| where ActionType == @\"ConnectionSuccess\"
-| where RemoteUrl has_any(RMMUrl)
-| where not (RemoteUrl has_any(SanctionRMM))
-| summarize arg_max(TimeGenerated, *) by DeviceId""",
+| where Timestamp > ago(1h)
+| where ActionType == \"ConnectionSuccess\"
+| extend RemoteUrlClean = tolower(tostring(RemoteUrl))
+| extend RemoteHost = case(
+    RemoteUrlClean startswith \"http://\", tostring(parse_url(RemoteUrlClean).Host),
+    RemoteUrlClean startswith \"https://\", tostring(parse_url(RemoteUrlClean).Host),
+    tostring(split(RemoteUrlClean, \"/\")[0])
+)
+| extend RemoteHost = trim(@\"\\.+\", tostring(split(RemoteHost, \":\")[0]))
+| where isnotempty(RemoteHost)
+| where not (RemoteHost has_any(SanctionRMM))
+| mv-expand Domain = RMMDomains to typeof(string)
+| extend DomainRoot = trim(@\"\\.+\", Domain)
+| where RemoteHost == DomainRoot
+    or RemoteHost endswith strcat(\".\", DomainRoot)
+    or (Domain startswith \"-\" and RemoteHost endswith Domain)
+| summarize arg_max(Timestamp, *) by DeviceId""",
         "references": ["https://github.com/magicsword-io/LOLRMM"],
         "requirements": [
             "Microsoft Defender for Endpoint",

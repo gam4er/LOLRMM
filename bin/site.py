@@ -3,12 +3,22 @@ import argparse
 import sys
 import os
 import json
-import datetime
-import jinja2
 import csv
 import re
-import shutil
 import subprocess
+
+
+def slugify(text):
+    text = str(text).lower()
+    text = re.sub(r"[^a-z0-9\s-]", "", text)
+    text = re.sub(r"[\s_-]+", "-", text)
+    return text.strip("-")
+
+
+def clean_csv_value(value):
+    if isinstance(value, str):
+        return re.sub(r"\s*\n\s*", " ", value).strip()
+    return value
 
 
 def write_rmm_tools_csv(rmm_tools, output_dir, VERBOSE):
@@ -40,7 +50,7 @@ def write_rmm_tools_csv(rmm_tools, output_dir, VERBOSE):
     ]
 
     with open(output_file, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=header)
+        writer = csv.DictWriter(f, fieldnames=header, lineterminator="\n")
         writer.writeheader()
 
         for rmm_tool in rmm_tools:
@@ -52,18 +62,24 @@ def write_rmm_tools_csv(rmm_tools, output_dir, VERBOSE):
                 pe_metadata = pe_metadata[0]  # Take the first item if it's a list
 
             row = {
-                "Name": rmm_tool.get("Name", ""),
-                "Category": rmm_tool.get("Category", ""),
-                "Description": rmm_tool.get("Description", ""),
-                "Author": rmm_tool.get("Author", ""),
-                "Created": rmm_tool.get("Created", ""),
-                "LastModified": rmm_tool.get("LastModified", ""),
-                "Website": rmm_tool.get("Details", {}).get("Website", ""),
-                "Filename": pe_metadata.get("Filename", ""),
-                "OriginalFileName": pe_metadata.get("OriginalFileName", ""),
-                "PEDescription": pe_metadata.get("Description", ""),
-                "Product": pe_metadata.get("Product", ""),
-                "Privileges": rmm_tool.get("Details", {}).get("Privileges", ""),
+                "Name": clean_csv_value(rmm_tool.get("Name", "")),
+                "Category": clean_csv_value(rmm_tool.get("Category", "")),
+                "Description": clean_csv_value(rmm_tool.get("Description", "")),
+                "Author": clean_csv_value(rmm_tool.get("Author", "")),
+                "Created": clean_csv_value(rmm_tool.get("Created", "")),
+                "LastModified": clean_csv_value(rmm_tool.get("LastModified", "")),
+                "Website": clean_csv_value(
+                    rmm_tool.get("Details", {}).get("Website", "")
+                ),
+                "Filename": clean_csv_value(pe_metadata.get("Filename", "")),
+                "OriginalFileName": clean_csv_value(
+                    pe_metadata.get("OriginalFileName", "")
+                ),
+                "PEDescription": clean_csv_value(pe_metadata.get("Description", "")),
+                "Product": clean_csv_value(pe_metadata.get("Product", "")),
+                "Privileges": clean_csv_value(
+                    rmm_tool.get("Details", {}).get("Privileges", "")
+                ),
                 "Free": str(rmm_tool.get("Details", {}).get("Free", "")),
                 "Verification": str(
                     rmm_tool.get("Details", {}).get("Verification", "")
@@ -102,7 +118,7 @@ def write_rmm_tools_csv(rmm_tools, output_dir, VERBOSE):
                     }
                 ),
                 "Detections": json.dumps(rmm_tool.get("Detections", [])),
-                "References": ", ".join(rmm_tool.get("References", [])),
+                "References": clean_csv_value(", ".join(rmm_tool.get("References", []))),
                 "Acknowledgement": json.dumps(rmm_tool.get("Acknowledgement", [])),
             }
 
@@ -115,31 +131,30 @@ def write_rmm_tools_table_csv(rmm_tools, output_dir, VERBOSE):
     header = ["Name", "Category", "Description", "Author"]
 
     with open(output_file, "w", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=header)
+        writer = csv.DictWriter(f, fieldnames=header, lineterminator="\n")
         writer.writeheader()
 
         for rmm_tool in rmm_tools:
             if VERBOSE:
                 print(f"Writing RMM tool table CSV: {rmm_tool['Name']}")
 
-            # Replace parentheses with underscores in the link
-            name_link = f"[{rmm_tool['Name']}](/rmm_tools/{rmm_tool['Name'].lower().replace(' ', '_').replace('(', '_').replace(')', '_')})"
+            name_link = f"[{rmm_tool['Name']}](/rmm_tools/{slugify(rmm_tool['Name'])})"
 
             row = {
                 "Name": name_link,
                 "Category": rmm_tool.get("Category", ""),
                 "Description": (
-                    rmm_tool.get("Description", "")[:100] + "..."
+                    clean_csv_value(rmm_tool.get("Description", ""))[:100] + "..."
                     if rmm_tool.get("Description", "")
                     else ""
                 ),
-                "Author": rmm_tool.get("Author", ""),
+                "Author": clean_csv_value(rmm_tool.get("Author", "")),
             }
 
             writer.writerow(row)
 
 
-def generate_doc_rmm_tools(REPO_PATH, OUTPUT_DIR, TEMPLATE_PATH, messages, VERBOSE):
+def generate_rmm_data(REPO_PATH, OUTPUT_DIR, messages, VERBOSE):
     manifest_files = []
     for root, dirs, files in os.walk(REPO_PATH):
         for file in files:
@@ -159,38 +174,7 @@ def generate_doc_rmm_tools(REPO_PATH, OUTPUT_DIR, TEMPLATE_PATH, messages, VERBO
                 print(f"Error reading {manifest_file}: {exc}")
                 sys.exit(1)
 
-    # Write markdowns
-    j2_env = jinja2.Environment(
-        loader=jinja2.FileSystemLoader(TEMPLATE_PATH),
-        trim_blocks=True,
-        lstrip_blocks=True,
-        autoescape=False,
-    )
-
-    def clean_multiline(text):
-        if isinstance(text, str):
-            return text.replace("\n", " ").strip()
-        return text
-
-    j2_env.filters["clean_multiline"] = clean_multiline
-    j2_env.globals.update(dump=json.dumps)
-    j2_env.globals.update(escape=re.escape)
-
-    tools_dir = os.path.join(OUTPUT_DIR, "pages", "tools")
-    shutil.rmtree(tools_dir)
-    os.mkdir(tools_dir)
-    d = datetime.datetime.now()
-    template = j2_env.get_template("rmm.md.j2")
-    for rmm_tool in rmm_tools:
-        # Replace parentheses with underscores in the file name
-        file_name = f"{rmm_tool['Name'].lower().replace(' ', '_').replace('(', '_').replace(')', '_')}.mdx"
-        output_path = os.path.join(tools_dir, file_name)
-        output = template.render(rmm=rmm_tool, time=str(d.strftime("%Y-%m-%d")))
-        with open(output_path, "w", encoding="utf-8") as f:
-            f.write(output)
-    messages.append(
-        f"site_gen.py wrote {len(rmm_tools)} RMM tools markdown to: {tools_dir}"
-    )
+    os.makedirs(os.path.join(OUTPUT_DIR, "public", "api"), exist_ok=True)
 
     # Write API CSV
     write_rmm_tools_csv(rmm_tools, OUTPUT_DIR, VERBOSE)
@@ -251,35 +235,9 @@ if __name__ == "__main__":
     OUTPUT_DIR = args.output
     VERBOSE = args.verbose
 
-    TEMPLATE_PATH = os.path.join(os.path.dirname(__file__), "jinja2_templates")
-
-    if VERBOSE:
-        print(f"Wiping the {os.path.join(OUTPUT_DIR, 'pages', 'tools')} folder")
-
-    # Clean up old RMM tool files
-    try:
-        rmm_tools_dir = os.path.join(OUTPUT_DIR, "pages", "tools")
-        for file in os.listdir(rmm_tools_dir):
-            if file.endswith(".md") and file != "_index.md":
-                os.remove(os.path.join(rmm_tools_dir, file))
-    except OSError as e:
-        print(f"Error: {e}")
-        sys.exit(1)
-
-    # Clean up API artifacts
-    api_json = os.path.join(OUTPUT_DIR, "public", "api", "rmm_tools.json")
-    api_csv = os.path.join(OUTPUT_DIR, "public", "api", "rmm_tools.csv")
-    api_domains_csv = os.path.join(OUTPUT_DIR, "public", "api", "rmm_domains.csv")
-    if os.path.exists(api_json):
-        os.remove(api_json)
-    if os.path.exists(api_csv):
-        os.remove(api_csv)
-    if os.path.exists(api_domains_csv):
-        os.remove(api_domains_csv)
-
     messages = []
-    rmm_tools, messages = generate_doc_rmm_tools(
-        REPO_PATH, OUTPUT_DIR, TEMPLATE_PATH, messages, VERBOSE
+    rmm_tools, messages = generate_rmm_data(
+        REPO_PATH, OUTPUT_DIR, messages, VERBOSE
     )
 
     # Generate the domains CSV file
@@ -291,15 +249,15 @@ if __name__ == "__main__":
             os.path.dirname(os.path.abspath(__file__)), "generate_domains_csv.py"
         )
         result = subprocess.run(
-            ["python3", script_path], capture_output=True, text=True
+            [sys.executable, script_path], capture_output=True, text=True
         )
         if result.returncode == 0:
             if VERBOSE:
                 print(result.stdout)
         else:
-            print(f"Error generating domains CSV: {result.stderr}")
+            raise RuntimeError(f"Error generating domains CSV: {result.stderr}")
     except Exception as e:
-        print(f"Failed to generate domains CSV: {e}")
+        raise RuntimeError(f"Failed to generate domains CSV: {e}") from e
 
     # Generate detection files
     if VERBOSE:
@@ -310,15 +268,15 @@ if __name__ == "__main__":
             os.path.dirname(os.path.abspath(__file__)), "generate_detections.py"
         )
         result = subprocess.run(
-            ["python3", script_path], capture_output=True, text=True
+            [sys.executable, script_path], capture_output=True, text=True
         )
         if result.returncode == 0:
             if VERBOSE:
                 print(result.stdout)
         else:
-            print(f"Error generating detection files: {result.stderr}")
+            raise RuntimeError(f"Error generating detection files: {result.stderr}")
     except Exception as e:
-        print(f"Failed to generate detection files: {e}")
+        raise RuntimeError(f"Failed to generate detection files: {e}") from e
 
     for m in messages:
         print(m)

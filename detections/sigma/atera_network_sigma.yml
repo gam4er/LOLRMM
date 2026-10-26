@@ -7,8 +7,9 @@ references:
     - https://github.com/magicsword-io/LOLRMM
 author: LOLRMM Project
 date: 2025-12-01
+modified: 2026-09-02
 tags:
-    - attack.execution
+    - attack.command-and-control
     - attack.t1219
 logsource:
     product: windows
@@ -16,21 +17,18 @@ logsource:
 detection:
     selection:
         DestinationHostname|endswith:
-            - pubsub.atera.com
-            - pubsub.pubnub.com
-            - agentreporting.atera.com
-            - getalphacontrol.com
-            - app.atera.com
-            - agenthb.atera.com
-            - packagesstore.blob.core.windows.net
-            - ps.pndsn.com
-            - agent-api.atera.com
-            - cacerts.thawte.com
-            - agentreportingstore.blob.core.windows.net
-            - atera-agent-heartbeat.servicebus.windows.net
-            - ps.atera.com
-            - atera.pubnubapi.com
-            - appcdn.atera.com
+            - 'pubsub.atera.com'
+            - 'agentreporting.atera.com'
+            - 'getalphacontrol.com'
+            - 'app.atera.com'
+            - 'agenthb.atera.com'
+            - 'packagesstore.blob.core.windows.net'
+            - 'agent-api.atera.com'
+            - 'agentreportingstore.blob.core.windows.net'
+            - 'atera-agent-heartbeat.servicebus.windows.net'
+            - 'ps.atera.com'
+            - 'atera.pubnubapi.com'
+            - 'appcdn.atera.com'
     condition: selection
 falsepositives:
     - Legitimate use of Atera
